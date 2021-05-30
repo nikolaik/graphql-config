@@ -4,7 +4,6 @@ import {
   Loader,
   defaultLoaders,
 } from 'cosmiconfig';
-import loadTs from '@endemolshinegroup/cosmiconfig-typescript-loader';
 import {loadToml} from 'cosmiconfig-toml-loader';
 import {env} from 'string-env-interpolation';
 
@@ -20,6 +19,15 @@ const legacySearchPlaces = [
   '.graphqlconfig.yaml',
   '.graphqlconfig.yml',
 ];
+
+function isTsLoaderInstalled(): boolean {
+  try {
+    require.resolve("@endemolshinegroup/cosmiconfig-typescript-loader");
+  } catch(e) {
+      return false;
+  }
+  return true;
+}
 
 export function isLegacyConfig(filepath: string): boolean {
   filepath = filepath.toLowerCase();
@@ -67,16 +75,15 @@ function prepareCosmiconfig(moduleName: string, {legacy}: {legacy: boolean}) {
   const loadYaml = createCustomLoader(defaultLoaders['.yaml']);
   const loadTomlCustom = createCustomLoader(loadToml);
   const loadJson = createCustomLoader(defaultLoaders['.json']);
+  const shouldLoadTs = isTsLoaderInstalled();
 
   const searchPlaces = [
-    `#.config.ts`,
     `#.config.js`,
     '#.config.json',
     '#.config.yaml',
     '#.config.yml',
     '#.config.toml',
     '.#rc',
-    '.#rc.ts',
     '.#rc.js',
     '.#rc.json',
     '.#rc.yml',
@@ -85,22 +92,32 @@ function prepareCosmiconfig(moduleName: string, {legacy}: {legacy: boolean}) {
     'package.json',
   ];
 
+  if(shouldLoadTs) {
+    searchPlaces.push('#.config.ts', '.#rc.ts');
+  }
+
   if (legacy) {
     searchPlaces.push(...legacySearchPlaces);
   }
+
+  const loaders = {
+    '.js': defaultLoaders['.js'],
+    '.json': loadJson,
+    '.yaml': loadYaml,
+    '.yml': loadYaml,
+    '.toml': loadTomlCustom,
+    noExt: loadYaml,
+  };
+
+  if (shouldLoadTs) {
+    loaders['.ts'] = require('@endemolshinegroup/cosmiconfig-typescript-loader').default;
+  }
+
 
   // We need to wrap loaders in order to access and transform file content (as string)
   // Cosmiconfig has transform option but at this point config is not a string but an object
   return {
     searchPlaces: searchPlaces.map((place) => place.replace('#', moduleName)),
-    loaders: {
-      '.ts': loadTs,
-      '.js': defaultLoaders['.js'],
-      '.json': loadJson,
-      '.yaml': loadYaml,
-      '.yml': loadYaml,
-      '.toml': loadTomlCustom,
-      noExt: loadYaml,
-    },
+    loaders,
   };
 }
